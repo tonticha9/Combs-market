@@ -11,8 +11,8 @@ class ScanRun(Base):
     id = Column(Integer, primary_key=True, index=True)
     sport = Column(String, default="tennis")
     scan_date = Column(String, index=True)       # yyyy-mm-dd
-    status = Column(String, default="running")
-error_message = Column(String, nullable=True)
+    status = Column(String, default="running")   # running | completed | failed
+    error_message = Column(String, nullable=True)
     total_matches_found = Column(Integer, default=0)
     total_groups_checked = Column(Integer, default=0)
     profitable_groups_found = Column(Integer, default=0)
