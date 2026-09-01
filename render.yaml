@@ -1,0 +1,31 @@
+services:
+  # ---- Backend (FastAPI) ----
+  - type: web
+    name: tennis-arbitrage-api
+    env: python
+    plan: free
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: ALLSPORTS_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DEFAULT_TOTAL_STAKE
+        value: "1000"
+      - key: CORS_ORIGINS
+        value: "*"
+
+  # ---- Frontend (dashboard, static) ----
+  - type: web
+    name: tennis-arbitrage-dashboard
+    env: static
+    plan: free
+    rootDir: frontend
+    buildCommand: ""
+    staticPublishPath: .
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

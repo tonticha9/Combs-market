@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="sw">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Court Ledger — Tennis Arbitrage Scanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B1F2E;
+    --panel:#0F2A3E;
+    --panel-2:#123349;
+    --line:#28516B;
+    --text:#EAF0F2;
+    --muted:#7FA0B3;
+    --ball:#D7E62B;
+    --clay:#E0604C;
+    --radius:2px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'IBM Plex Mono', monospace;
+    min-height:100vh;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 64px 64px;
+    background-position: -1px -1px;
+    background-attachment: fixed;
+  }
+  .backdrop{ background: linear-gradient(180deg, rgba(11,31,46,0.94), rgba(11,31,46,0.985) 240px, var(--bg) 480px); min-height:100vh; }
+
+  header{
+    padding: 40px 32px 24px;
+    border-bottom: 1px solid var(--line);
+  }
+  .eyebrow{
+    font-family:'Oswald', sans-serif;
+    font-weight:500;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    font-size: 12px;
+    margin: 0 0 6px;
+  }
+  h1{
+    font-family:'Oswald', sans-serif;
+    font-weight:700;
+    font-size: 42px;
+    letter-spacing: -0.01em;
+    margin: 0 0 8px;
+    color: var(--text);
+  }
+  h1 span{ color: var(--ball); }
+  .sub{ color: var(--muted); font-size: 14px; max-width: 640px; line-height: 1.6; margin: 0; }
+
+  .controls{
+    display:flex; gap: 14px; align-items:flex-end; flex-wrap: wrap;
+    padding: 24px 32px; border-bottom: 1px solid var(--line);
+  }
+  .field label{
+    display:block; font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:0.1em;
+    color: var(--muted); margin-bottom: 6px; text-transform: uppercase;
+  }
+  .field input{
+    background: var(--panel); border: 1px solid var(--line); color: var(--text);
+    font-family: 'IBM Plex Mono', monospace; font-size: 14px; padding: 10px 12px; border-radius: var(--radius);
+    min-width: 160px;
+  }
+  .field input:focus{ outline: none; border-color: var(--ball); }
+  button.scan{
+    background: var(--ball); color: #0B1F2E; border: none; font-family:'Oswald',sans-serif;
+    font-weight: 600; font-size: 14px; letter-spacing: 0.03em; padding: 11px 22px; border-radius: var(--radius);
+    cursor: pointer; transition: transform 0.08s ease;
+  }
+  button.scan:hover{ transform: translateY(-1px); }
+  button.scan:disabled{ opacity: 0.5; cursor: wait; }
+
+  main{ padding: 28px 32px 80px; max-width: 1100px; margin: 0 auto; }
+
+  .status{ color: var(--muted); font-size: 13px; margin-bottom: 20px; min-height: 20px; }
+  .status.err{ color: var(--clay); }
+
+  .group{
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    margin-bottom: 20px; overflow: hidden;
+  }
+  .group-head{
+    display:flex; justify-content: space-between; align-items: center;
+    padding: 16px 20px; cursor: pointer; border-bottom: 1px solid var(--line);
+  }
+  .group-head:hover{ background: var(--panel-2); }
+  .group-title{ font-family:'Oswald',sans-serif; font-size: 15px; letter-spacing:0.02em; }
+  .group-meta{ display:flex; gap: 22px; align-items:center; }
+  .metric{ text-align:right; }
+  .metric .val{ font-size: 16px; font-weight:600; }
+  .metric .lbl{ font-size: 10px; color: var(--muted); letter-spacing:0.08em; text-transform:uppercase; }
+  .profit{ color: var(--ball); }
+
+  .matches-row{ display:grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); }
+  .match-card{ background: var(--panel); padding: 14px 16px; }
+  .match-card .players{ font-size: 13px; margin-bottom: 8px; line-height: 1.4; }
+  .match-card .odd-line{ display:flex; justify-content:space-between; font-size: 12px; color: var(--muted); padding: 2px 0; }
+  .match-card .odd-line b{ color: var(--text); font-weight: 600; }
+
+  .combos-wrap{ display:none; padding: 4px 0 8px; }
+  .combos-wrap.open{ display:block; }
+  table{ width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th{
+    text-align:left; padding: 8px 20px; color: var(--muted); font-weight:500;
+    font-size: 10px; letter-spacing:0.08em; text-transform: uppercase;
+    border-bottom: 1px solid var(--line);
+  }
+  tbody td{ padding: 8px 20px; border-bottom: 1px solid rgba(40,81,107,0.4); }
+  tbody tr:hover{ background: var(--panel-2); }
+  .odd-cell{ color: var(--ball); font-weight:600; }
+
+  .empty{
+    text-align:center; padding: 60px 20px; color: var(--muted); font-size:14px; line-height:1.7;
+    border: 1px dashed var(--line); border-radius: var(--radius);
+  }
+  .note{
+    margin-top: 40px; padding: 16px 18px; border-left: 2px solid var(--clay);
+    background: var(--panel); font-size: 12px; color: var(--muted); line-height: 1.7;
+  }
+</style>
+</head>
+<body>
+<div class="backdrop">
+  <header>
+    <p class="eyebrow">TENNIS · NO-LOSS SCANNER</p>
+    <h1>Court <span>Ledger</span></h1>
+    <p class="sub">Inachanganua mechi za tennis duniani kote, inatengeneza vikundi vya combos 16, na kuonyesha vikundi vyenye faida ya uhakika (surebets) tu — vinginevyo havionekani hapa.</p>
+  </header>
+
+  <div class="controls">
+    <div class="field">
+      <label for="scanDate">Tarehe</label>
+      <input type="date" id="scanDate" />
+    </div>
+    <div class="field">
+      <label for="stake">Jumla ya stake (TZS/USD)</label>
+      <input type="number" id="stake" value="1000" min="1" />
+    </div>
+    <div class="field">
+      <label for="apiBase">API URL (backend)</label>
+      <input type="text" id="apiBase" placeholder="https://your-backend.onrender.com" style="min-width:280px;" />
+    </div>
+    <button class="scan" id="scanBtn">Anza Scan</button>
+  </div>
+
+  <main>
+    <p class="status" id="status"></p>
+    <div id="results"></div>
+    <div class="note">
+      Kumbuka: mfumo unaonyesha vikundi ambavyo jumla ya implied probability (1/odd) ya combos zake 16 ni chini ya 100% wakati wa scan. Odds za bookmakers zinabadilika haraka — thibitisha odds kabla ya kuweka stake halisi.
+    </div>
+  </main>
+</div>
+
+<script>
+  const statusEl = document.getElementById('status');
+  const resultsEl = document.getElementById('results');
+  const scanBtn = document.getElementById('scanBtn');
+  const dateInput = document.getElementById('scanDate');
+  const stakeInput = document.getElementById('stake');
+  const apiBaseInput = document.getElementById('apiBase');
+
+  dateInput.value = new Date().toISOString().slice(0,10);
+  apiBaseInput.value = localStorage.getItem('apiBase') || '';
+
+  function fmt(n){ return Number(n).toLocaleString(undefined, {maximumFractionDigits:2}); }
+
+  scanBtn.addEventListener('click', runScan);
+
+  async function runScan(){
+    const apiBase = apiBaseInput.value.replace(/\/$/, '');
+    localStorage.setItem('apiBase', apiBase);
+    if(!apiBase){ statusEl.textContent = 'Weka API URL ya backend kwanza.'; statusEl.className='status err'; return; }
+
+    const scanDate = dateInput.value;
+    const stake = stakeInput.value || 1000;
+
+    scanBtn.disabled = true;
+    statusEl.className = 'status';
+    statusEl.textContent = 'Inachanganua mechi za ' + scanDate + ' ...';
+    resultsEl.innerHTML = '';
+
+    try{
+      const res = await fetch(`${apiBase}/api/scan/tennis?scan_date=${scanDate}&total_stake=${stake}`, { method: 'POST' });
+      if(!res.ok) throw new Error('Server error: ' + res.status);
+      const data = await res.json();
+      renderResults(data);
+    }catch(err){
+      statusEl.className = 'status err';
+      statusEl.textContent = 'Hitilafu: ' + err.message;
+    }finally{
+      scanBtn.disabled = false;
+    }
+  }
+
+  function renderResults(data){
+    if(!data.groups || data.groups.length === 0){
+      statusEl.textContent = `Scan imekamilika. Vikundi vyenye faida vilivyopatikana: 0`;
+      resultsEl.innerHTML = `<div class="empty">Hakuna surebet iliyopatikana tarehe hii.<br/>Jaribu tarehe nyingine au subiri odds zibadilike.</div>`;
+      return;
+    }
+    statusEl.textContent = `Scan imekamilika. Vikundi vyenye faida vilivyopatikana: ${data.groups.length}`;
+
+    resultsEl.innerHTML = data.groups.map((g, gi) => `
+      <div class="group">
+        <div class="group-head" onclick="document.getElementById('combos-${gi}').classList.toggle('open')">
+          <div class="group-title">Kikundi #${g.group_id} — ${g.matches.length} mechi</div>
+          <div class="group-meta">
+            <div class="metric"><div class="val">${g.margin_percent}%</div><div class="lbl">Margin</div></div>
+            <div class="metric"><div class="val profit">+${fmt(g.guaranteed_profit)}</div><div class="lbl">Faida ya uhakika</div></div>
+          </div>
+        </div>
+        <div class="matches-row">
+          ${g.matches.map(m => `
+            <div class="match-card">
+              <div class="players">${m.player_home}<br/>vs ${m.player_away}</div>
+              <div class="odd-line"><span>${m.player_home}</span><b>${m.best_home_odd}</b></div>
+              <div class="odd-line"><span>${m.player_away}</span><b>${m.best_away_odd}</b></div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="combos-wrap" id="combos-${gi}">
+          <table>
+            <thead><tr><th>#</th><th>Picks</th><th>Combined Odd</th><th>Stake</th><th>Payout</th></tr></thead>
+            <tbody>
+              ${g.combos.map(c => `
+                <tr>
+                  <td>${c.combo_index + 1}</td>
+                  <td>${c.picks.map(p => p.selected_player).join(' + ')}</td>
+                  <td class="odd-cell">${c.combined_odd}</td>
+                  <td>${fmt(c.stake)}</td>
+                  <td>${fmt(c.potential_payout)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `).join('');
+  }
+</script>
+</body>
+</html>
