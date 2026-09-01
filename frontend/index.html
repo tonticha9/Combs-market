@@ -186,20 +186,70 @@
 
     scanBtn.disabled = true;
     statusEl.className = 'status';
-    statusEl.textContent = 'Inachanganua mechi za ' + scanDate + ' ...';
+    statusEl.textContent = 'Inaanzisha scan (backend inaweza kuchukua sekunde 30-60 kuamka kama ilikuwa imelala)...';
     resultsEl.innerHTML = '';
 
     try{
-      const res = await fetch(`${apiBase}/api/scan/tennis?scan_date=${scanDate}&total_stake=${stake}`, { method: 'POST' });
-      if(!res.ok) throw new Error('Server error: ' + res.status);
-      const data = await res.json();
-      renderResults(data);
+      // Hatua 1: anzisha scan - jibu linarudi mara moja (haisubiri scan ikamilike)
+      const startRes = await fetch(`${apiBase}/api/scan/tennis/start?scan_date=${scanDate}&total_stake=${stake}`, { method: 'POST' });
+      if(!startRes.ok) throw new Error('Server error: ' + startRes.status);
+      const startData = await startRes.json();
+      const scanRunId = startData.scan_run_id;
+
+      // Hatua 2: uliza mara kwa mara (polling) hadi ikamilike
+      await pollScanStatus(apiBase, scanRunId);
     }catch(err){
       statusEl.className = 'status err';
       statusEl.textContent = 'Hitilafu: ' + err.message;
-    }finally{
       scanBtn.disabled = false;
     }
+  }
+
+  async function pollScanStatus(apiBase, scanRunId){
+    const maxAttempts = 60;       // hadi dakika 5 (60 x sekunde 5)
+    const intervalMs = 5000;
+    let attempts = 0;
+
+    return new Promise((resolve) => {
+      const check = async () => {
+        attempts++;
+        try{
+          const res = await fetch(`${apiBase}/api/scan/tennis/status/${scanRunId}`);
+          const data = await res.json();
+
+          if(data.status === 'completed'){
+            renderResults(data);
+            scanBtn.disabled = false;
+            resolve();
+            return;
+          }
+          if(data.status === 'failed'){
+            statusEl.className = 'status err';
+            statusEl.textContent = 'Scan imeshindwa: ' + (data.error_message || 'Hitilafu isiyojulikana');
+            scanBtn.disabled = false;
+            resolve();
+            return;
+          }
+
+          statusEl.textContent = `Inachanganua... (jaribio ${attempts}/${maxAttempts})`;
+
+          if(attempts >= maxAttempts){
+            statusEl.className = 'status err';
+            statusEl.textContent = 'Scan inachukua muda mrefu mno. Jaribu tena baadaye.';
+            scanBtn.disabled = false;
+            resolve();
+            return;
+          }
+          setTimeout(check, intervalMs);
+        }catch(err){
+          statusEl.className = 'status err';
+          statusEl.textContent = 'Hitilafu wakati wa kuangalia hali ya scan: ' + err.message;
+          scanBtn.disabled = false;
+          resolve();
+        }
+      };
+      check();
+    });
   }
 
   function renderResults(data){
