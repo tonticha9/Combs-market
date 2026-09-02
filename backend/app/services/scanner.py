@@ -10,9 +10,11 @@ from app.services import allsports_client as api
 from app.services.arbitrage_engine import MatchOdds, find_profitable_groups, ComboGroupResult
 
 
-async def scan_tennis_day(scan_date: str, stake_per_combo: float = 1000.0) -> List[ComboGroupResult]:
+async def scan_tennis_day(scan_date: str, stake_per_combo: float = 1000.0, group_size: int = 4) -> List[ComboGroupResult]:
     """
     scan_date: 'yyyy-mm-dd'
+    group_size: idadi ya mechi kwa kila kikundi (2, 3, 4, ...) - idadi ya
+        combos ni 2^group_size. Idadi ndogo = rahisi zaidi kupata "hakuna hasara".
     Inarudisha vikundi VYENYE FAIDA TU (hakuna hasara), tayari na
     payouts/profits zilizohesabiwa kwa stake_per_combo iliyotolewa.
     """
@@ -32,8 +34,8 @@ async def scan_tennis_day(scan_date: str, stake_per_combo: float = 1000.0) -> Li
         if match_odds:
             matches_with_odds.append(match_odds)
 
-    if len(matches_with_odds) < 4:
+    if len(matches_with_odds) < group_size:
         return []
 
-    profitable_groups = find_profitable_groups(matches_with_odds, group_size=4, stake_per_combo=stake_per_combo)
+    profitable_groups = find_profitable_groups(matches_with_odds, group_size=group_size, stake_per_combo=stake_per_combo)
     return profitable_groups
