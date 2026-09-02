@@ -15,6 +15,7 @@ Mantiki:
 from dataclasses import dataclass, field
 from itertools import product, combinations
 from typing import List, Dict, Optional
+from datetime import datetime
 
 
 @dataclass
@@ -30,6 +31,7 @@ class MatchOdds:
     best_home_bookmaker: str
     best_away_odd: float
     best_away_bookmaker: str
+    kickoff_utc: Optional[datetime] = None   # datetime ya kuanza mechi (UTC), kwa ajili ya kuhesabu 'masaa kabla'
 
     def home_prob(self) -> float:
         return 1.0 / self.best_home_odd
@@ -78,17 +80,24 @@ class ComboGroupResult:
     is_profitable: bool          # True kama worst_profit >= 0 (hakuna hasara HATA kwenye comb mbaya zaidi)
     payouts: Dict[int, float] = field(default_factory=dict)     # combo index -> unapata (payout)
     profits: Dict[int, float] = field(default_factory=dict)     # combo index -> profit
+    risk_mode: str = "full"
 
 
-def generate_combo_group(matches: List[MatchOdds], stake_per_combo: float = 1000.0) -> ComboGroupResult:
+def generate_combo_group(matches: List[MatchOdds], stake_per_combo: float = 1000.0,
+                          risk_mode: str = "full") -> ComboGroupResult:
     """
     Kwa kila comb, unaweka STAKE ILE ILE KAMILI (stake_per_combo),
-    bila kuivunja/kuigawanya. 'Hakuna hasara' inahakikishwa kama comb yenye
-    odd ya chini kabisa bado inarudisha angalau sawa na jumla ya gharama zote
-    (total_invest = stake_per_combo x idadi ya combos).
+    bila kuivunja/kuigawanya.
 
-    Inafanya kazi na idadi yoyote ya mechi (2, 3, 4, ...) - idadi ya combos
-    ni 2^(idadi ya mechi).
+    risk_mode:
+      - "full": combos ZOTE (2^n) zinabaki - hakuna hasara kabisa, hata comb
+        mbaya zaidi (odd ya chini kabisa) bado inarudisha angalau gharama yote.
+      - "medium": combos MBILI za ncha zinaondolewa - ile ya 'home yote'
+        (favorites zote zishinde, home-home-home-home) na ile ya 'away yote'
+        (underdogs zote zishinde, away-away-away-away). HATARI: ikiwa
+        matokeo halisi ni MOJAWAPO ya combos hizi mbili zilizoondolewa,
+        stake YOTE ya siku hiyo inapotea. Combos zilizobaki huwa na malipo
+        bora zaidi kwa sababu total_invest ni ndogo zaidi.
     """
     if len(matches) < 2:
         raise ValueError("Kikundi lazima kiwe na angalau mechi 2.")
@@ -100,9 +109,19 @@ def generate_combo_group(matches: List[MatchOdds], stake_per_combo: float = 1000
         away_pick = ComboPick(m.event_key, label, "away", m.player_away, m.best_away_odd, m.best_away_bookmaker)
         per_match_options.append([home_pick, away_pick])
 
-    combos: List[Combo] = []
+    all_combos: List[Combo] = []
     for combination in product(*per_match_options):
-        combos.append(Combo(picks=list(combination)))
+        all_combos.append(Combo(picks=list(combination)))
+
+    if risk_mode == "medium":
+        def is_all_same_side(c, side):
+            return all(p.selection == side for p in c.picks)
+        combos = [
+            c for c in all_combos
+            if not is_all_same_side(c, "home") and not is_all_same_side(c, "away")
+        ]
+    else:
+        combos = all_combos
 
     num_combos = len(combos)
     total_invest = round(stake_per_combo * num_combos, 2)
@@ -129,13 +148,15 @@ def generate_combo_group(matches: List[MatchOdds], stake_per_combo: float = 1000
         is_profitable=is_profitable,
         payouts=payouts,
         profits=profits,
+        risk_mode=risk_mode,
     )
 
 
 def find_profitable_groups(all_matches: List[MatchOdds], group_size: int = 4,
                             stake_per_combo: float = 1000.0,
                             top_candidates: int = 60,
-                            max_results: int = 30) -> List[ComboGroupResult]:
+                            max_results: int = 30,
+                            risk_mode: str = "full") -> List[ComboGroupResult]:
     """
     Inapokea orodha ya mechi ZOTE za siku (duniani kote, tayari zina best odds),
     kisha:
@@ -159,24 +180,30 @@ def find_profitable_groups(all_matches: List[MatchOdds], group_size: int = 4,
         return min(m.best_home_odd, m.best_away_odd)
 
     sorted_matches = sorted(all_matches, key=min_side_odd, reverse=True)
-    candidates = sorted_matches[:top_candidates]
     num_combos = 2 ** group_size
 
-    # Hatua 1 (HARAKA): chuja kwa worst-case pekee, bila kuunda combos zote
-    passing_combinations = []
-    for combo_matches in combinations(candidates, group_size):
-        worst_odd_product = 1.0
-        for m in combo_matches:
-            worst_odd_product *= min_side_odd(m)
-        if worst_odd_product >= num_combos:  # sharti la 'hakuna hasara'
-            passing_combinations.append((worst_odd_product, combo_matches))
+    if risk_mode == "full":
+        candidates = sorted_matches[:top_candidates]
+        # Hatua 1 (HARAKA): chuja kwa worst-case pekee, bila kuunda combos zote
+        passing_combinations = []
+        for combo_matches in combinations(candidates, group_size):
+            worst_odd_product = 1.0
+            for m in combo_matches:
+                worst_odd_product *= min_side_odd(m)
+            if worst_odd_product >= num_combos:  # sharti la 'hakuna hasara'
+                passing_combinations.append((worst_odd_product, combo_matches))
+        passing_combinations.sort(key=lambda x: x[0], reverse=True)
+        candidate_combinations = [c for _, c in passing_combinations[:max_results * 3]]
+    else:
+        # 'medium' risk_mode haiwezi kutumia shortcut hiyo hiyo (kwa sababu
+        # combo mbaya zaidi si lazima iwe 'home yote'/'away yote' - hizo ndizo
+        # zilizoondolewa). Punguza top_candidates kidogo kudhibiti muda.
+        candidates = sorted_matches[:min(top_candidates, 30)]
+        candidate_combinations = list(combinations(candidates, group_size))
 
-    # Hatua 2: kwa vikundi vilivyopita tu, unda combos kamili 16 (au 2^n)
-    # kwa maelezo kamili ya kuonyesha kwenye dashboard
-    passing_combinations.sort(key=lambda x: x[0], reverse=True)
     profitable_groups = []
-    for _, combo_matches in passing_combinations[:max_results]:
-        result = generate_combo_group(list(combo_matches), stake_per_combo=stake_per_combo)
+    for combo_matches in candidate_combinations:
+        result = generate_combo_group(list(combo_matches), stake_per_combo=stake_per_combo, risk_mode=risk_mode)
         if result.is_profitable:
             profitable_groups.append(result)
 
