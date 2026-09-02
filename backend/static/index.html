@@ -81,7 +81,7 @@
 
   main{ padding: 28px 32px 80px; max-width: 1100px; margin: 0 auto; }
 
-  .status{ color: var(--muted); font-size: 13px; margin-bottom: 20px; min-height: 20px; }
+  .status{ color: var(--muted); font-size: 13px; margin-bottom: 20px; min-height: 20px; white-space: pre-wrap; word-break: break-word; }
   .status.err{ color: var(--clay); }
 
   .group{
@@ -183,7 +183,14 @@
       // Hatua 1: anzisha scan - jibu linarudi mara moja (haisubiri scan ikamilike)
       // Njia ya relative path - frontend na backend ziko domain moja, hakuna CORS
       const startRes = await fetch(`/api/scan/tennis/start?scan_date=${scanDate}&total_stake=${stake}`, { method: 'POST' });
-      if(!startRes.ok) throw new Error('Server error: ' + startRes.status);
+      if(!startRes.ok){
+        let bodyText = '';
+        try{
+          const errData = await startRes.json();
+          bodyText = errData.debug_traceback ? ('\n\n' + errData.debug_traceback) : JSON.stringify(errData);
+        }catch(e){ bodyText = await startRes.text(); }
+        throw new Error('Server error: ' + startRes.status + bodyText);
+      }
       const startData = await startRes.json();
       const scanRunId = startData.scan_run_id;
 
