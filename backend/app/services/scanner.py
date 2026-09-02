@@ -1,19 +1,20 @@
 """
 Scanner ya siku - inachukua mechi zote za tennis za tarehe fulani,
-inazichanganya na odds, na kutafuta vikundi vyenye faida (surebets).
+inazichanganya na odds, na kutafuta vikundi vyenye faida (hakuna hasara
+hata kwenye comb mbaya zaidi, ukiweka stake ile ile kamili kwenye kila comb).
 """
 
 from typing import List
-from datetime import date
 
 from app.services import allsports_client as api
 from app.services.arbitrage_engine import MatchOdds, find_profitable_groups, ComboGroupResult
 
 
-async def scan_tennis_day(scan_date: str, total_stake: float = 1000.0) -> List[ComboGroupResult]:
+async def scan_tennis_day(scan_date: str, stake_per_combo: float = 1000.0) -> List[ComboGroupResult]:
     """
     scan_date: 'yyyy-mm-dd'
-    Inarudisha vikundi VYENYE FAIDA TU (surebets), tayari na stakes zilizohesabiwa.
+    Inarudisha vikundi VYENYE FAIDA TU (hakuna hasara), tayari na
+    payouts/profits zilizohesabiwa kwa stake_per_combo iliyotolewa.
     """
     fixtures = await api.fetch_fixtures(scan_date, scan_date)
     if not fixtures:
@@ -34,5 +35,5 @@ async def scan_tennis_day(scan_date: str, total_stake: float = 1000.0) -> List[C
     if len(matches_with_odds) < 4:
         return []
 
-    profitable_groups = find_profitable_groups(matches_with_odds, group_size=4, total_stake=total_stake)
+    profitable_groups = find_profitable_groups(matches_with_odds, group_size=4, stake_per_combo=stake_per_combo)
     return profitable_groups
