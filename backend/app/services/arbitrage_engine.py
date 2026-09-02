@@ -82,13 +82,16 @@ class ComboGroupResult:
 
 def generate_combo_group(matches: List[MatchOdds], stake_per_combo: float = 1000.0) -> ComboGroupResult:
     """
-    Kwa kila comb (kati ya 16), unaweka STAKE ILE ILE KAMILI (stake_per_combo),
+    Kwa kila comb, unaweka STAKE ILE ILE KAMILI (stake_per_combo),
     bila kuivunja/kuigawanya. 'Hakuna hasara' inahakikishwa kama comb yenye
     odd ya chini kabisa bado inarudisha angalau sawa na jumla ya gharama zote
     (total_invest = stake_per_combo x idadi ya combos).
+
+    Inafanya kazi na idadi yoyote ya mechi (2, 3, 4, ...) - idadi ya combos
+    ni 2^(idadi ya mechi).
     """
-    if len(matches) != 4:
-        raise ValueError("Kikundi lazima kiwe na mechi 4 hasa.")
+    if len(matches) < 2:
+        raise ValueError("Kikundi lazima kiwe na angalau mechi 2.")
 
     per_match_options = []
     for m in matches:
