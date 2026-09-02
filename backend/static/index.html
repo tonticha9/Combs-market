@@ -76,6 +76,11 @@
     min-width: 160px;
   }
   .field input:focus, .field select:focus{ outline: none; border-color: var(--ball); }
+  .checkbox-field label{ display:flex; align-items:center; gap:8px; font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:0.05em; color: var(--muted); text-transform:uppercase; cursor:pointer; padding-bottom: 2px;}
+  .checkbox-field input[type=checkbox]{ width:16px; height:16px; accent-color: var(--ball); }
+  .button-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  button.scan.medium{ background: transparent; color: var(--ball); border: 1px solid var(--ball); }
+  button.scan.medium:hover{ background: rgba(215,230,43,0.08); }
   button.scan{
     background: var(--ball); color: #0B1F2E; border: none; font-family:'Oswald',sans-serif;
     font-weight: 600; font-size: 14px; letter-spacing: 0.03em; padding: 11px 22px; border-radius: var(--radius);
@@ -113,9 +118,9 @@
   .match-card .odd-line{ display:flex; justify-content:space-between; font-size: 12px; color: var(--muted); padding: 2px 0; }
   .match-card .odd-line b{ color: var(--text); font-weight: 600; }
 
-  .combos-wrap{ display:none; padding: 4px 0 8px; }
+  .combos-wrap{ display:none; padding: 4px 0 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .combos-wrap.open{ display:block; }
-  table{ width: 100%; border-collapse: collapse; font-size: 12px; }
+  table{ width: 100%; min-width: 620px; border-collapse: collapse; font-size: 12px; }
   thead th{
     text-align:left; padding: 8px 20px; color: var(--muted); font-weight:500;
     font-size: 10px; letter-spacing:0.08em; text-transform: uppercase;
@@ -124,6 +129,8 @@
   tbody td{ padding: 8px 20px; border-bottom: 1px solid rgba(40,81,107,0.4); }
   tbody tr:hover{ background: var(--panel-2); }
   .odd-cell{ color: var(--ball); font-weight:600; }
+  .profit-cell{ color: #5FE0A0; font-weight:700; }
+  .scroll-hint{ font-size: 10px; color: var(--muted); padding: 0 20px 6px; }
 
   .empty{
     text-align:center; padding: 60px 20px; color: var(--muted); font-size:14px; line-height:1.7;
@@ -160,14 +167,23 @@
         <option value="4" selected>4 mechi (combos 16)</option>
       </select>
     </div>
-    <button class="scan" id="scanBtn">Anza Scan</button>
+    <div class="field checkbox-field">
+      <label>
+        <input type="checkbox" id="includeTomorrow" />
+        Changanua kesho pia
+      </label>
+    </div>
+    <div class="button-row">
+      <button class="scan" id="scanBtn" data-risk="full">Anza Scan (Hakuna Hasara)</button>
+      <button class="scan medium" id="scanBtnMedium" data-risk="medium">Medium Risk (Ushindi Mkubwa)</button>
+    </div>
   </div>
 
   <main>
     <p class="status" id="status"></p>
     <div id="results"></div>
     <div class="note">
-      Kumbuka: mfumo unachanganua mechi ZOTE za tennis duniani kote za tarehe uliyochagua, unachagua zile zenye uwezekano mkubwa wa kufaa, kisha unajaribu michanganyiko mingi kupata vikundi ambavyo, ukiweka stake ile ile kamili kwenye kila comb, HATA comb mbaya zaidi bado inarudisha angalau sawa na gharama uliyowekeza (hakuna hasara). Odds za bookmakers zinabadilika haraka — thibitisha odds kabla ya kuweka stake halisi.
+      Kumbuka: mfumo unachanganua mechi ZOTE za tennis duniani kote za tarehe uliyochagua (masaa ya EAT - Afrika Mashariki), unachukua tu mechi zenye angalau masaa 10 kabla ya kuanza (ili uwe na muda wa kubeti kabla odds hazijabadilika). "Hakuna Hasara" inafunika matokeo YOTE yanayowezekana. "Medium Risk" inaondoa combo ya 'home yote' na 'away yote' - malipo bora zaidi, lakini ukipoteza mojawapo ya hizo mbili zilizoondolewa, unapoteza stake yote. Odds za bookmakers zinabadilika haraka — thibitisha kabla ya kuweka stake halisi.
     </div>
   </main>
 </div>
@@ -176,22 +192,27 @@
   const statusEl = document.getElementById('status');
   const resultsEl = document.getElementById('results');
   const scanBtn = document.getElementById('scanBtn');
+  const scanBtnMedium = document.getElementById('scanBtnMedium');
   const dateInput = document.getElementById('scanDate');
   const stakeInput = document.getElementById('stake');
   const groupSizeInput = document.getElementById('groupSize');
+  const includeTomorrowInput = document.getElementById('includeTomorrow');
 
   dateInput.value = new Date().toISOString().slice(0,10);
 
   function fmt(n){ return Number(n).toLocaleString(undefined, {maximumFractionDigits:2}); }
 
-  scanBtn.addEventListener('click', runScan);
+  scanBtn.addEventListener('click', () => runScan('full'));
+  scanBtnMedium.addEventListener('click', () => runScan('medium'));
 
-  async function runScan(){
+  async function runScan(riskMode){
     const scanDate = dateInput.value;
     const stake = stakeInput.value || 1000;
     const groupSize = groupSizeInput.value || 4;
+    const includeTomorrow = includeTomorrowInput.checked;
 
     scanBtn.disabled = true;
+    scanBtnMedium.disabled = true;
     statusEl.className = 'status';
     statusEl.textContent = 'Inaanzisha scan...';
     resultsEl.innerHTML = '';
@@ -199,7 +220,7 @@
     try{
       // Hatua 1: anzisha scan - jibu linarudi mara moja (haisubiri scan ikamilike)
       // Njia ya relative path - frontend na backend ziko domain moja, hakuna CORS
-      const startRes = await fetch(`/api/scan/tennis/start?scan_date=${scanDate}&stake_per_combo=${stake}&group_size=${groupSize}`, { method: 'POST' });
+      const startRes = await fetch(`/api/scan/tennis/start?scan_date=${scanDate}&stake_per_combo=${stake}&group_size=${groupSize}&risk_mode=${riskMode}&include_tomorrow=${includeTomorrow}`, { method: 'POST' });
       if(!startRes.ok){
         let bodyText = '';
         try{
@@ -216,7 +237,8 @@
     }catch(err){
       statusEl.className = 'status err';
       statusEl.textContent = 'Hitilafu: ' + err.message;
-      scanBtn.disabled = false;
+      scanBtn.disabled = false; scanBtnMedium.disabled = false;
+      scanBtnMedium.disabled = false;
     }
   }
 
@@ -234,14 +256,14 @@
 
           if(data.status === 'completed'){
             renderResults(data);
-            scanBtn.disabled = false;
+            scanBtn.disabled = false; scanBtnMedium.disabled = false;
             resolve();
             return;
           }
           if(data.status === 'failed'){
             statusEl.className = 'status err';
             statusEl.textContent = 'Scan imeshindwa: ' + (data.error_message || 'Hitilafu isiyojulikana');
-            scanBtn.disabled = false;
+            scanBtn.disabled = false; scanBtnMedium.disabled = false;
             resolve();
             return;
           }
@@ -251,7 +273,7 @@
           if(attempts >= maxAttempts){
             statusEl.className = 'status err';
             statusEl.textContent = 'Scan inachukua muda mrefu mno. Jaribu tena baadaye.';
-            scanBtn.disabled = false;
+            scanBtn.disabled = false; scanBtnMedium.disabled = false;
             resolve();
             return;
           }
@@ -259,7 +281,7 @@
         }catch(err){
           statusEl.className = 'status err';
           statusEl.textContent = 'Hitilafu wakati wa kuangalia hali ya scan: ' + err.message;
-          scanBtn.disabled = false;
+          scanBtn.disabled = false; scanBtnMedium.disabled = false;
           resolve();
         }
       };
@@ -295,6 +317,7 @@
           `).join('')}
         </div>
         <div class="combos-wrap" id="combos-${gi}">
+          <p class="scroll-hint">← Sogeza kando kuona safu ya Profit →</p>
           <table>
             <thead><tr><th>No</th><th>Combo Odds</th><th>Total Odds</th><th>Stake</th><th>Unapata</th><th>Profit</th></tr></thead>
             <tbody>
@@ -305,7 +328,7 @@
                   <td class="odd-cell">${c.combined_odd}</td>
                   <td>${fmt(c.stake)}</td>
                   <td>${fmt(c.potential_payout)}</td>
-                  <td class="${c.profit === 0 ? '' : 'odd-cell'}">${fmt(c.profit)}</td>
+                  <td class="profit-cell">+${fmt(c.profit)}</td>
                 </tr>
               `).join('')}
             </tbody>
