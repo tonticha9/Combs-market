@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from sqlalchemy.orm import Session
-from datetime import date
+from datetime import date, timedelta
 
 from app.db import get_db, SessionLocal
-from app.services.scanner import scan_tennis_day
+from app.services.scanner import scan_tennis_range
 from app.models import ScanRun, ComboGroup, Combo
 from app.config import settings
 
@@ -54,42 +54,54 @@ def _serialize_group(group) -> dict:
         "total_invest": group.total_invest,
         "worst_profit": group.worst_profit,
         "best_profit": group.best_profit,
+        "risk_mode": group.risk_mode,
     }
 
 
-async def _run_scan_background(scan_run_id: int, scan_date: str, stake_per_combo: float, group_size: int):
-    """Inaendesha scan halisi 'nyuma ya pazia' - haizuii request ya HTTP isubiri."""
+async def _run_scan_background(scan_run_id: int, scan_date_from: str, scan_date_to: str,
+                                stake_per_combo: float, group_size: int, risk_mode: str):
+    """
+    Inaendesha scan halisi 'nyuma ya pazia' - haizuii request ya HTTP isubiri.
+    Inachanganua kila siku (kutoka scan_date_from hadi scan_date_to) PEKE
+    YAKE - mechi za siku tofauti HAZICHANGANYWI kwenye kikundi kimoja.
+    """
     db = SessionLocal()
     try:
-        profitable_groups = await scan_tennis_day(scan_date, stake_per_combo=stake_per_combo, group_size=group_size)
+        results_by_date = await scan_tennis_range(
+            scan_date_from, scan_date_to, stake_per_combo=stake_per_combo,
+            group_size=group_size, risk_mode=risk_mode,
+        )
 
-        for group in profitable_groups:
-            serialized = _serialize_group(group)
-            combo_group = ComboGroup(
-                scan_run_id=scan_run_id,
-                matches_json=serialized["matches_json"],
-                total_stake=serialized["stake_per_combo"],
-                guaranteed_profit=serialized["worst_profit"],
-                margin_percent=None,
-                total_implied_prob=None,
-            )
-            db.add(combo_group)
-            db.flush()
+        total_groups = 0
+        for day_str, profitable_groups in results_by_date.items():
+            for group in profitable_groups:
+                serialized = _serialize_group(group)
+                combo_group = ComboGroup(
+                    scan_run_id=scan_run_id,
+                    matches_json=serialized["matches_json"],
+                    total_stake=serialized["stake_per_combo"],
+                    guaranteed_profit=serialized["worst_profit"],
+                    margin_percent=None,
+                    total_implied_prob=None,
+                )
+                db.add(combo_group)
+                db.flush()
 
-            for c in serialized["combos_out"]:
-                db.add(Combo(
-                    group_id=combo_group.id,
-                    combo_index=c["combo_index"],
-                    picks_json=c["picks"],
-                    combined_odd=c["combined_odd"],
-                    stake=c["stake"],
-                    potential_payout=c["potential_payout"],
-                ))
+                for c in serialized["combos_out"]:
+                    db.add(Combo(
+                        group_id=combo_group.id,
+                        combo_index=c["combo_index"],
+                        picks_json=c["picks"],
+                        combined_odd=c["combined_odd"],
+                        stake=c["stake"],
+                        potential_payout=c["potential_payout"],
+                    ))
+                total_groups += 1
 
         scan_run = db.query(ScanRun).filter(ScanRun.id == scan_run_id).first()
         scan_run.status = "completed"
-        scan_run.profitable_groups_found = len(profitable_groups)
-        scan_run.total_groups_checked = len(profitable_groups)
+        scan_run.profitable_groups_found = total_groups
+        scan_run.total_groups_checked = total_groups
         db.commit()
     except Exception as e:
         db.rollback()
@@ -106,21 +118,32 @@ async def _run_scan_background(scan_run_id: int, scan_date: str, stake_per_combo
 async def start_tennis_scan(
     background_tasks: BackgroundTasks,
     scan_date: str = Query(default=None, description="yyyy-mm-dd, default = leo"),
+    include_tomorrow: bool = Query(default=False, description="Changanua kesho pia (bila kuchanganya na leo)"),
     stake_per_combo: float = Query(default=None, description="Stake KAMILI kwa kila comb (haigawanywi)"),
     group_size: int = Query(default=4, description="Idadi ya mechi kwa kila kikundi (2, 3, 4, ...)"),
+    risk_mode: str = Query(default="full", description="'full' (hakuna hasara kabisa) au 'medium' (hatari ya kati)"),
     db: Session = Depends(get_db),
 ):
     scan_date = scan_date or date.today().isoformat()
     stake_per_combo = stake_per_combo or settings.DEFAULT_TOTAL_STAKE
 
-    scan_run = ScanRun(sport="tennis", scan_date=scan_date, status="running")
+    scan_date_to = scan_date
+    if include_tomorrow:
+        d = date.fromisoformat(scan_date)
+        scan_date_to = (d + timedelta(days=1)).isoformat()
+
+    label = scan_date if scan_date == scan_date_to else f"{scan_date} - {scan_date_to}"
+    scan_run = ScanRun(sport="tennis", scan_date=label, status="running")
     db.add(scan_run)
     db.commit()
     db.refresh(scan_run)
 
-    background_tasks.add_task(_run_scan_background, scan_run.id, scan_date, stake_per_combo, group_size)
+    background_tasks.add_task(
+        _run_scan_background, scan_run.id, scan_date, scan_date_to,
+        stake_per_combo, group_size, risk_mode,
+    )
 
-    return {"scan_run_id": scan_run.id, "status": "running", "scan_date": scan_date}
+    return {"scan_run_id": scan_run.id, "status": "running", "scan_date": label}
 
 
 def _group_to_response(group: ComboGroup, combos) -> dict:
