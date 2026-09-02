@@ -99,10 +99,12 @@
   .metric .val{ font-size: 16px; font-weight:600; }
   .metric .lbl{ font-size: 10px; color: var(--muted); letter-spacing:0.08em; text-transform:uppercase; }
   .profit{ color: var(--ball); }
+  .no-loss-badge{ color: var(--ball); font-size:12px; font-weight:600; }
 
   .matches-row{ display:grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); }
   .match-card{ background: var(--panel); padding: 14px 16px; }
-  .match-card .players{ font-size: 13px; margin-bottom: 8px; line-height: 1.4; }
+  .match-card .players{ font-size: 13px; margin-bottom: 6px; line-height: 1.4; }
+  .match-card .when{ font-size: 11px; color: var(--muted); margin-bottom: 8px; }
   .match-card .odd-line{ display:flex; justify-content:space-between; font-size: 12px; color: var(--muted); padding: 2px 0; }
   .match-card .odd-line b{ color: var(--text); font-weight: 600; }
 
@@ -142,7 +144,7 @@
       <input type="date" id="scanDate" />
     </div>
     <div class="field">
-      <label for="stake">Jumla ya stake (TZS/USD)</label>
+      <label for="stake">Stake kwa kila comb (TZS/USD)</label>
       <input type="number" id="stake" value="1000" min="1" />
     </div>
     <button class="scan" id="scanBtn">Anza Scan</button>
@@ -182,7 +184,7 @@
     try{
       // Hatua 1: anzisha scan - jibu linarudi mara moja (haisubiri scan ikamilike)
       // Njia ya relative path - frontend na backend ziko domain moja, hakuna CORS
-      const startRes = await fetch(`/api/scan/tennis/start?scan_date=${scanDate}&total_stake=${stake}`, { method: 'POST' });
+      const startRes = await fetch(`/api/scan/tennis/start?scan_date=${scanDate}&stake_per_combo=${stake}`, { method: 'POST' });
       if(!startRes.ok){
         let bodyText = '';
         try{
@@ -261,16 +263,17 @@
     resultsEl.innerHTML = data.groups.map((g, gi) => `
       <div class="group">
         <div class="group-head" onclick="document.getElementById('combos-${gi}').classList.toggle('open')">
-          <div class="group-title">Kikundi #${g.group_id} — ${g.matches.length} mechi</div>
+          <div class="group-title">Kikundi #${g.group_id} — ${g.matches.length} mechi <span class="no-loss-badge">Hakuna Hasara ✅</span></div>
           <div class="group-meta">
-            <div class="metric"><div class="val">${g.margin_percent}%</div><div class="lbl">Margin</div></div>
-            <div class="metric"><div class="val profit">+${fmt(g.guaranteed_profit)}</div><div class="lbl">Faida ya uhakika</div></div>
+            <div class="metric"><div class="val">${fmt(g.total_invest)}</div><div class="lbl">Jumla Uwekezaji</div></div>
+            <div class="metric"><div class="val profit">${g.worst_profit >= 0 ? '+' : ''}${fmt(g.worst_profit)}</div><div class="lbl">Faida ya chini kabisa</div></div>
           </div>
         </div>
         <div class="matches-row">
           ${g.matches.map(m => `
             <div class="match-card">
               <div class="players">${m.player_home}<br/>vs ${m.player_away}</div>
+              <div class="when">${m.event_date || ''} · ${m.event_time || ''}</div>
               <div class="odd-line"><span>${m.player_home}</span><b>${m.best_home_odd}</b></div>
               <div class="odd-line"><span>${m.player_away}</span><b>${m.best_away_odd}</b></div>
             </div>
@@ -278,15 +281,16 @@
         </div>
         <div class="combos-wrap" id="combos-${gi}">
           <table>
-            <thead><tr><th>#</th><th>Picks</th><th>Combined Odd</th><th>Stake</th><th>Payout</th></tr></thead>
+            <thead><tr><th>No</th><th>Combo Odds</th><th>Total Odds</th><th>Stake</th><th>Unapata</th><th>Profit</th></tr></thead>
             <tbody>
               ${g.combos.map(c => `
                 <tr>
                   <td>${c.combo_index + 1}</td>
-                  <td>${c.picks.map(p => p.selected_player).join(' + ')}</td>
+                  <td>${c.odds_display}</td>
                   <td class="odd-cell">${c.combined_odd}</td>
                   <td>${fmt(c.stake)}</td>
                   <td>${fmt(c.potential_payout)}</td>
+                  <td class="${c.profit === 0 ? '' : 'odd-cell'}">${fmt(c.profit)}</td>
                 </tr>
               `).join('')}
             </tbody>
