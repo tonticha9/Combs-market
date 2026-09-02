@@ -70,7 +70,12 @@
     font-family: 'IBM Plex Mono', monospace; font-size: 14px; padding: 10px 12px; border-radius: var(--radius);
     min-width: 160px;
   }
-  .field input:focus{ outline: none; border-color: var(--ball); }
+  .field select{
+    background: var(--panel); border: 1px solid var(--line); color: var(--text);
+    font-family: 'IBM Plex Mono', monospace; font-size: 14px; padding: 10px 12px; border-radius: var(--radius);
+    min-width: 160px;
+  }
+  .field input:focus, .field select:focus{ outline: none; border-color: var(--ball); }
   button.scan{
     background: var(--ball); color: #0B1F2E; border: none; font-family:'Oswald',sans-serif;
     font-weight: 600; font-size: 14px; letter-spacing: 0.03em; padding: 11px 22px; border-radius: var(--radius);
@@ -101,7 +106,7 @@
   .profit{ color: var(--ball); }
   .no-loss-badge{ color: var(--ball); font-size:12px; font-weight:600; }
 
-  .matches-row{ display:grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); }
+  .matches-row{ display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1px; background: var(--line); }
   .match-card{ background: var(--panel); padding: 14px 16px; }
   .match-card .players{ font-size: 13px; margin-bottom: 6px; line-height: 1.4; }
   .match-card .when{ font-size: 11px; color: var(--muted); margin-bottom: 8px; }
@@ -147,6 +152,14 @@
       <label for="stake">Stake kwa kila comb (TZS/USD)</label>
       <input type="number" id="stake" value="1000" min="1" />
     </div>
+    <div class="field">
+      <label for="groupSize">Idadi ya mechi kwa kikundi</label>
+      <select id="groupSize">
+        <option value="2">2 mechi (combos 4)</option>
+        <option value="3">3 mechi (combos 8)</option>
+        <option value="4" selected>4 mechi (combos 16)</option>
+      </select>
+    </div>
     <button class="scan" id="scanBtn">Anza Scan</button>
   </div>
 
@@ -165,6 +178,7 @@
   const scanBtn = document.getElementById('scanBtn');
   const dateInput = document.getElementById('scanDate');
   const stakeInput = document.getElementById('stake');
+  const groupSizeInput = document.getElementById('groupSize');
 
   dateInput.value = new Date().toISOString().slice(0,10);
 
@@ -175,6 +189,7 @@
   async function runScan(){
     const scanDate = dateInput.value;
     const stake = stakeInput.value || 1000;
+    const groupSize = groupSizeInput.value || 4;
 
     scanBtn.disabled = true;
     statusEl.className = 'status';
@@ -184,7 +199,7 @@
     try{
       // Hatua 1: anzisha scan - jibu linarudi mara moja (haisubiri scan ikamilike)
       // Njia ya relative path - frontend na backend ziko domain moja, hakuna CORS
-      const startRes = await fetch(`/api/scan/tennis/start?scan_date=${scanDate}&stake_per_combo=${stake}`, { method: 'POST' });
+      const startRes = await fetch(`/api/scan/tennis/start?scan_date=${scanDate}&stake_per_combo=${stake}&group_size=${groupSize}`, { method: 'POST' });
       if(!startRes.ok){
         let bodyText = '';
         try{
