@@ -57,11 +57,11 @@ def _serialize_group(group) -> dict:
     }
 
 
-async def _run_scan_background(scan_run_id: int, scan_date: str, stake_per_combo: float):
+async def _run_scan_background(scan_run_id: int, scan_date: str, stake_per_combo: float, group_size: int):
     """Inaendesha scan halisi 'nyuma ya pazia' - haizuii request ya HTTP isubiri."""
     db = SessionLocal()
     try:
-        profitable_groups = await scan_tennis_day(scan_date, stake_per_combo=stake_per_combo)
+        profitable_groups = await scan_tennis_day(scan_date, stake_per_combo=stake_per_combo, group_size=group_size)
 
         for group in profitable_groups:
             serialized = _serialize_group(group)
@@ -107,6 +107,7 @@ async def start_tennis_scan(
     background_tasks: BackgroundTasks,
     scan_date: str = Query(default=None, description="yyyy-mm-dd, default = leo"),
     stake_per_combo: float = Query(default=None, description="Stake KAMILI kwa kila comb (haigawanywi)"),
+    group_size: int = Query(default=4, description="Idadi ya mechi kwa kila kikundi (2, 3, 4, ...)"),
     db: Session = Depends(get_db),
 ):
     scan_date = scan_date or date.today().isoformat()
@@ -117,7 +118,7 @@ async def start_tennis_scan(
     db.commit()
     db.refresh(scan_run)
 
-    background_tasks.add_task(_run_scan_background, scan_run.id, scan_date, stake_per_combo)
+    background_tasks.add_task(_run_scan_background, scan_run.id, scan_date, stake_per_combo, group_size)
 
     return {"scan_run_id": scan_run.id, "status": "running", "scan_date": scan_date}
 
