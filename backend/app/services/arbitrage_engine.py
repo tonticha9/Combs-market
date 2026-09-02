@@ -13,7 +13,7 @@ Mantiki:
 """
 
 from dataclasses import dataclass, field
-from itertools import product
+from itertools import product, combinations
 from typing import List, Dict, Optional
 
 
@@ -133,19 +133,52 @@ def generate_combo_group(matches: List[MatchOdds], stake_per_combo: float = 1000
 
 
 def find_profitable_groups(all_matches: List[MatchOdds], group_size: int = 4,
-                            stake_per_combo: float = 1000.0) -> List[ComboGroupResult]:
+                            stake_per_combo: float = 1000.0,
+                            top_candidates: int = 60,
+                            max_results: int = 30) -> List[ComboGroupResult]:
     """
-    Inapokea orodha ya mechi zote za siku (tayari zina best odds),
-    inazipanga kwa vikundi vya 4-4 (bila kurudia), na kurudisha
-    vikundi VYENYE FAIDA TU (worst_profit >= 0, yaani HAKUNA HASARA
-    hata kwenye comb mbaya zaidi).
+    Inapokea orodha ya mechi ZOTE za siku (duniani kote, tayari zina best odds),
+    kisha:
+
+    1. Inachagua mechi 'top_candidates' zenye uwezekano mkubwa zaidi wa kufaa -
+       yaani zile ambazo odd ya upande 'salama zaidi' (favorite) bado ni kubwa
+       kiasi (siyo favorite mkubwa mno).
+    2. Kutoka kwenye mechi hizo za juu pekee, inajaribu MICHANGANYIKO MINGI
+       (combinations) ya 'group_size' - lakini kwa HARAKA, kwa kuhesabu tu
+       'worst case' ya kila mchanganyiko (kihesabu: comb mbaya zaidi daima ni
+       ile inayochagua odd ya chini kabisa kwenye kila mechi - hakuna haja ya
+       kuunda combos zote 2^group_size kuangalia hilo). Combos kamili
+       zinaundwa TU kwa vikundi vilivyopita kigezo.
+    3. Inarudisha vikundi vyenye faida (worst_profit >= 0) tu, vikiwa
+       vimepangwa kutoka bora zaidi kwenda chini, hadi 'max_results'.
     """
+    if len(all_matches) < group_size:
+        return []
+
+    def min_side_odd(m: MatchOdds) -> float:
+        return min(m.best_home_odd, m.best_away_odd)
+
+    sorted_matches = sorted(all_matches, key=min_side_odd, reverse=True)
+    candidates = sorted_matches[:top_candidates]
+    num_combos = 2 ** group_size
+
+    # Hatua 1 (HARAKA): chuja kwa worst-case pekee, bila kuunda combos zote
+    passing_combinations = []
+    for combo_matches in combinations(candidates, group_size):
+        worst_odd_product = 1.0
+        for m in combo_matches:
+            worst_odd_product *= min_side_odd(m)
+        if worst_odd_product >= num_combos:  # sharti la 'hakuna hasara'
+            passing_combinations.append((worst_odd_product, combo_matches))
+
+    # Hatua 2: kwa vikundi vilivyopita tu, unda combos kamili 16 (au 2^n)
+    # kwa maelezo kamili ya kuonyesha kwenye dashboard
+    passing_combinations.sort(key=lambda x: x[0], reverse=True)
     profitable_groups = []
-    for i in range(0, len(all_matches) - group_size + 1, group_size):
-        group = all_matches[i:i + group_size]
-        if len(group) < group_size:
-            continue
-        result = generate_combo_group(group, stake_per_combo=stake_per_combo)
+    for _, combo_matches in passing_combinations[:max_results]:
+        result = generate_combo_group(list(combo_matches), stake_per_combo=stake_per_combo)
         if result.is_profitable:
             profitable_groups.append(result)
-    return profitable_groups
+
+    profitable_groups.sort(key=lambda r: r.best_profit, reverse=True)
+    return profitable_groups[:max_results]
