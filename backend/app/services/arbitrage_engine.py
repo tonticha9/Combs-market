@@ -55,6 +55,7 @@ class Combo:
     picks: List[ComboPick]
     combined_odd: float = field(init=False)
     implied_prob: float = field(init=False)
+    odds_display: str = field(init=False)
 
     def __post_init__(self):
         odd_product = 1.0
@@ -62,6 +63,7 @@ class Combo:
             odd_product *= p.odd
         self.combined_odd = round(odd_product, 4)
         self.implied_prob = round(1.0 / self.combined_odd, 6)
+        self.odds_display = " x ".join(f"{p.odd:.2f}" for p in self.picks)
 
 
 @dataclass
@@ -69,14 +71,22 @@ class ComboGroupResult:
     """Matokeo ya kikundi kimoja cha mechi 4: combos zake 16 + tathmini ya faida."""
     matches: List[MatchOdds]
     combos: List[Combo]
-    total_implied_prob: float
-    is_profitable: bool
-    margin_percent: float
-    stakes: Dict[int, float] = field(default_factory=dict)
-    guaranteed_profit: Optional[float] = None
+    stake_per_combo: float
+    total_invest: float
+    worst_profit: float
+    best_profit: float
+    is_profitable: bool          # True kama worst_profit >= 0 (hakuna hasara HATA kwenye comb mbaya zaidi)
+    payouts: Dict[int, float] = field(default_factory=dict)     # combo index -> unapata (payout)
+    profits: Dict[int, float] = field(default_factory=dict)     # combo index -> profit
 
 
-def generate_combo_group(matches: List[MatchOdds], total_stake: float = 1000.0) -> ComboGroupResult:
+def generate_combo_group(matches: List[MatchOdds], stake_per_combo: float = 1000.0) -> ComboGroupResult:
+    """
+    Kwa kila comb (kati ya 16), unaweka STAKE ILE ILE KAMILI (stake_per_combo),
+    bila kuivunja/kuigawanya. 'Hakuna hasara' inahakikishwa kama comb yenye
+    odd ya chini kabisa bado inarudisha angalau sawa na jumla ya gharama zote
+    (total_invest = stake_per_combo x idadi ya combos).
+    """
     if len(matches) != 4:
         raise ValueError("Kikundi lazima kiwe na mechi 4 hasa.")
 
@@ -91,43 +101,48 @@ def generate_combo_group(matches: List[MatchOdds], total_stake: float = 1000.0) 
     for combination in product(*per_match_options):
         combos.append(Combo(picks=list(combination)))
 
-    total_implied_prob = round(sum(c.implied_prob for c in combos), 6)
-    is_profitable = total_implied_prob < 1.0
-    margin_percent = round((1.0 - total_implied_prob) * 100, 3)
+    num_combos = len(combos)
+    total_invest = round(stake_per_combo * num_combos, 2)
 
-    result = ComboGroupResult(
+    payouts = {}
+    profits = {}
+    for idx, c in enumerate(combos):
+        payout = round(stake_per_combo * c.combined_odd, 2)
+        profit = round(payout - total_invest, 2)
+        payouts[idx] = payout
+        profits[idx] = profit
+
+    worst_profit = min(profits.values())
+    best_profit = max(profits.values())
+    is_profitable = worst_profit >= 0
+
+    return ComboGroupResult(
         matches=matches,
         combos=combos,
-        total_implied_prob=total_implied_prob,
+        stake_per_combo=stake_per_combo,
+        total_invest=total_invest,
+        worst_profit=worst_profit,
+        best_profit=best_profit,
         is_profitable=is_profitable,
-        margin_percent=margin_percent,
+        payouts=payouts,
+        profits=profits,
     )
-
-    if is_profitable:
-        result.stakes = calculate_proportional_stakes(combos, total_stake)
-        payout = total_stake / total_implied_prob
-        result.guaranteed_profit = round(payout - total_stake, 2)
-
-    return result
-
-
-def calculate_proportional_stakes(combos: List[Combo], total_stake: float) -> Dict[int, float]:
-    total_implied = sum(c.implied_prob for c in combos)
-    stakes = {}
-    for idx, c in enumerate(combos):
-        stake = total_stake * (c.implied_prob / total_implied)
-        stakes[idx] = round(stake, 2)
-    return stakes
 
 
 def find_profitable_groups(all_matches: List[MatchOdds], group_size: int = 4,
-                            total_stake: float = 1000.0) -> List[ComboGroupResult]:
+                            stake_per_combo: float = 1000.0) -> List[ComboGroupResult]:
+    """
+    Inapokea orodha ya mechi zote za siku (tayari zina best odds),
+    inazipanga kwa vikundi vya 4-4 (bila kurudia), na kurudisha
+    vikundi VYENYE FAIDA TU (worst_profit >= 0, yaani HAKUNA HASARA
+    hata kwenye comb mbaya zaidi).
+    """
     profitable_groups = []
     for i in range(0, len(all_matches) - group_size + 1, group_size):
         group = all_matches[i:i + group_size]
         if len(group) < group_size:
             continue
-        result = generate_combo_group(group, total_stake=total_stake)
+        result = generate_combo_group(group, stake_per_combo=stake_per_combo)
         if result.is_profitable:
             profitable_groups.append(result)
     return profitable_groups
