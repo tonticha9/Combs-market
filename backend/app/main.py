@@ -9,7 +9,7 @@ app = FastAPI(title="Tennis No-Loss Arbitrage Scanner", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in settings.CORS_ORIGINS.split(",")],
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -30,7 +30,8 @@ def root():
         "status": "ok",
         "service": "Tennis No-Loss Arbitrage Scanner",
         "endpoints": {
-            "run_scan": "POST /api/scan/tennis?scan_date=yyyy-mm-dd&total_stake=1000",
+            "start_scan": "POST /api/scan/tennis/start?scan_date=yyyy-mm-dd&total_stake=1000",
+            "check_status": "GET /api/scan/tennis/status/{scan_run_id}",
             "history": "GET /api/scan/history",
             "group_detail": "GET /api/scan/groups/{group_id}",
         },
