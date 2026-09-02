@@ -1,8 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import os
+import traceback
 
 from app.db import Base, engine
 from app.routers import scan
@@ -19,6 +20,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def debug_exception_handler(request: Request, exc: Exception):
+    """
+    MUDA MFUPI (DEBUG): inaonyesha traceback kamili kwenye response ya JSON
+    badala ya kuficha 500 tupu. Hii ni kwa ajili ya kutatua matatizo tu -
+    ondoa/badilisha baada ya mfumo kufanya kazi vizuri kwa sababu inaonyesha
+    maelezo ya ndani ya server ambayo si salama kwa muda mrefu.
+    """
+    tb = traceback.format_exc()
+    return JSONResponse(
+        status_code=500,
+        content={
+            "debug_error": str(exc),
+            "debug_traceback": tb,
+            "path": str(request.url),
+        },
+    )
+
 
 app.include_router(scan.router)
 
